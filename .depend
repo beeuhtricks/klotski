@@ -1,0 +1,4 @@
+prelude.cmo :
+prelude.cmx :
+solution.cmo : prelude.cmo
+solution.cmx : prelude.cmx
