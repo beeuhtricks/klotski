@@ -80,43 +80,29 @@ let final (board: board) : bool = match board with
   | _ -> false
 
 exception OutOfBounds
+exception Illegal
 
 let move_piece (board : board) (piece : piece) ({ drow; dcol } : direction) : board option =
-  let rec find_piece (i, j) = match board.(i).(j) with
-    | p when p = piece -> (j, i)
-    | _ when j < 3 -> find_piece (i, j + 1)
-    | _ when i < 4 -> find_piece (i + 1, 0)
-    | _ -> (0, 0)
-  in
-  let left_upper = find_piece (0,0) in
-  let old_pos = match fst piece with
-    | S -> [left_upper; (fst left_upper + 1, snd left_upper); (fst left_upper, snd left_upper + 1); (fst left_upper + 1, snd left_upper + 1)]
-    | H -> [left_upper; (fst left_upper + 1, snd left_upper)]
-    | V -> [left_upper; (fst left_upper, snd left_upper + 1)]
-    | _ -> [left_upper] in
-  let shift (x, y) = (x + dcol, y + drow) in
-  let new_pos = List.rev_map shift old_pos |> List.rev in
-  let empty board (x, y) =
-    try
-      match board.(y).(x) with
-    | (X, _) -> true
-    | _ -> false
-    with _ -> false in
-  let empty_or_me = fun accu (x, y) ->
-    try (empty board (x, y) || board.(y).(x) = piece) && accu
-    with
-    _ -> false
-  in
-  let spaces_empty = List.fold_left empty_or_me true new_pos in
-  if not spaces_empty
-  then None
-  else
-    let new_board = Array.map Array.copy board in
-    let update (x, y) = Array.set new_board.(y) x piece in
-    let erase (x, y) = Array.set new_board.(y) x (X, 0) in
-  List.iter erase old_pos;
-  List.iter update new_pos;
-  Some new_board
+  let new_board = Array.make 5 (Array.make 4 x)
+  and old_board = Array.map Array.copy board in
+  try (for i = 0 to 4 do
+         for j = 0 to 3 do
+           if old_board.(i).(j) = piece
+           then let dest_piece = old_board.(i + drow).(j + dcol) in
+             if (dest_piece = x) || (dest_piece = piece)
+             then let dest_row = Array.copy new_board.(i + drow) in
+               (dest_row.(j + dcol) <- old_board.(i).(j);
+                new_board.(i + drow) <- dest_row)
+             else raise Illegal;
+           else if old_board.(i).(j) = x
+           then ()
+           else let new_row = Array.copy new_board.(i) in
+             (new_row.(j) <- old_board.(i).(j); new_board.(i) <- new_row)
+         done
+       done);
+    Some new_board
+  with _ -> None
+
 
 let possible_moves (board : board) : move list =
   let dirs = [{ drow = -1; dcol = 0 }; { drow = 1; dcol = 0 }; { drow = 0; dcol = 1 }; { drow = 0; dcol = -1 }] in
@@ -146,14 +132,13 @@ module BoardSet = Set.Make (struct
         | (C, _) -> 1
         | (_, C) -> -1
         | (V, _) -> 1
-        | (_, V) -> -1
+        | _ -> -1
       in
       try
         (for i = 0 to 4 do
            let r1 = b1.(i) and r2 = b2.(i) in
            for j = 0 to 3 do
-             let p1 = r1.(j) and p2 = r2.(j) in
-             let result = cmp p1 p2 in
+             let result = cmp r1.(j) r2.(j) in
              if result < 0
              then raise Neg
              else if result > 0
